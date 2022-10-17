@@ -1,4 +1,4 @@
-<div class="container">
+<!-- <div class="container">
 	<h1> {{ title }} </h1>
 
 	<ng-container *ngIf="userInfo">
@@ -9,9 +9,25 @@
 		</div>
 	</ng-container>
 
-	<button *ngIf="!isLoggedIn; else logout;" (click)="onloginWithGoogle()" class="btn btn-primary">Login with google</button>
+	<button *ngIf="!isLoggedIn; else logout;" mat-raised-button color="primary" (click)="onloginWithGoogle()">Login with google</button>
 	
 	<ng-template #logout>
-		<button (click)="onLogout()" class="btn">Logout</button>
+		<button (click)="onLogout()" mat-raised-button>Logout</button>
 	</ng-template>
-</div>
+</div> -->
+
+<mat-toolbar color="primary">
+	<span>Google OAuth</span>
+	
+	<nav>
+		<ul>
+			<li routerLink="dashboard" routerLinkActive="active">Dashboard</li>
+			<li routerLink="users" routerLinkActive="active">Users</li>
+			<li routerLink="login" routerLinkActive="active">Login</li>
+		</ul>
+	</nav>
+</mat-toolbar>
+
+<main class="container">
+	<router-outlet></router-outlet>
+</main>
