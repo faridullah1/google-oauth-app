@@ -12,12 +12,12 @@ export class DashboardComponent {
 	isLoggedIn = false;
 
 	constructor(private authService: AuthService) {
+		this.authService.loadUserProfile();
+
 		authService.userProfileSubject.subscribe(userInfo => {
 			this.userInfo = userInfo;
 			this.isLoggedIn = this.authService.isLoggedIn;
 		});
-
-		this.isLoggedIn = authService.isLoggedIn;
 	}
 
 	onLogout(): void {

@@ -1,8 +1,8 @@
 <ng-container *ngIf="userInfo">
-	<div>Name: {{ userInfo.info.name }}</div>
-	<div>Email: {{ userInfo.info.email }}</div>
+	<div>Name: {{ userInfo.info?.name }}</div>
+	<div>Email: {{ userInfo.info?.email }}</div>
 	<div>
-		<img [src]="userInfo.info.picture" alt="User image" class="user-image">
+		<img [src]="userInfo.info?.picture" alt="User image" class="user-image">
 	</div>
 </ng-container>
 

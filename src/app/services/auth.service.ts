@@ -1,10 +1,11 @@
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
-import { AuthConfig, NullValidationHandler, OAuthService } from 'angular-oauth2-oidc';
-import { Subject } from 'rxjs';
+import { AuthConfig, OAuthService } from 'angular-oauth2-oidc';
+import { BehaviorSubject, combineLatest, filter, map, Observable, Subject } from 'rxjs';
+import { environment } from 'src/environments/environment';
 
 export interface UserInfo {
-	info: {
+	info?: {
 		sub: string;
 		email: string;
 		name: string;
@@ -13,7 +14,7 @@ export interface UserInfo {
 }
 
 export const config: AuthConfig = {
-	clientId: '601653797159-p2raa8mrfotcorb6jh3jd8sj4ab0c7jr.apps.googleusercontent.com',
+	clientId: environment.clientId,
 	issuer: 'https://accounts.google.com',
 	scope: 'openid profile email',
 	redirectUri: 'http://localhost:4200',
@@ -24,43 +25,106 @@ export const config: AuthConfig = {
   providedIn: 'root'
 })
 export class AuthService {
-	userProfileSubject = new Subject<UserInfo>();
+	userProfileSubject = new BehaviorSubject<any>(null);
 
-	constructor(private readonly authService: OAuthService, private router: Router) 
+	private isAuthenticatedSubject$ = new BehaviorSubject<boolean>(false);
+	isAuthenticated$ = this.isAuthenticatedSubject$.asObservable();
+  
+	private isDoneLoadingSubject$ = new BehaviorSubject<boolean>(false);
+	isDoneLoading$ = this.isDoneLoadingSubject$.asObservable();
+	
+	canActivateProtectedRoutes$: Observable<boolean> = combineLatest([
+		this.isAuthenticated$,
+		this.isDoneLoading$
+    ]).pipe(map(values => values.every(b => b)));
+
+	constructor(private readonly oauthService: OAuthService, private router: Router) 
 	{
-		this.authService.configure(config);
-		this.authService.logoutUrl = 'https://www.google.com/accounts/logout';
-		this.authService.tokenValidationHandler = new NullValidationHandler();
+		this.init();
+	}
 
-		this.authService.loadDiscoveryDocument().then(() => {
-			this.authService.tryLoginImplicitFlow().then((isLoggedIn) => {
-				if (this.isLoggedIn) 
-				{
-					this.authService.loadUserProfile().then(profile => 
-					{
-						console.log('User profile =', profile);
-						this.userProfileSubject.next(profile as UserInfo);
-					});
-				}
-			})
+	private init(): void {
+		this.oauthService.configure(config);
+		this.oauthService.logoutUrl = 'https://www.google.com/accounts/logout';
+
+		this.listenToEvents();
+	
+		this.isAuthenticatedSubject$.next(this.oauthService.hasValidAccessToken());
+
+		this.oauthService.setupAutomaticSilentRefresh();
+	}
+
+	private listenToEvents(): void {
+		window.addEventListener('storage', (event) => {
+			// The `key` is `null` if the event was caused by `.clear()`
+			if (event.key !== 'access_token' && event.key !== null) {
+			  return;
+			}
+	  
+			console.warn('Noticed changes to access_token (most likely from another tab), updating isAuthenticated');
+			this.isAuthenticatedSubject$.next(this.oauthService.hasValidAccessToken());
+	  
+			if (!this.oauthService.hasValidAccessToken()) {
+			  	this.navigateToLoginPage();
+			}
 		});
+
+		this.oauthService.events.subscribe(_ => {
+			this.isAuthenticatedSubject$.next(this.oauthService.hasValidAccessToken());
+		});
+
+		this.oauthService.events
+			.pipe(filter(e => ['token_received'].includes(e.type)))
+			.subscribe(e => this.loadUserProfile());
+
+		this.oauthService.events
+			.pipe(filter(e => ['session_terminated', 'session_error'].includes(e.type)))
+			.subscribe(e => this.navigateToLoginPage());
+	}
+
+	public runInitialLoginSequence(): Promise<void> {
+		return this.oauthService.loadDiscoveryDocument()
+		  .then(() => this.oauthService.tryLogin())
+		  .then(() => {
+			if (this.oauthService.hasValidAccessToken()) {
+			  	return Promise.resolve();
+			}
+	
+			return Promise.reject();
+		  })
+		  .then(() => this.isDoneLoadingSubject$.next(true))
+		  .catch(() => this.isDoneLoadingSubject$.next(true));
+	}
+
+	private navigateToLoginPage() {
+		// TODO: Remember current URL
+		this.router.navigateByUrl('/login');
+	}
+
+	loadUserProfile(): void {
+		if (this.oauthService.hasValidAccessToken()) {
+			this.oauthService.loadUserProfile().then(profile => 
+			{
+				console.log('Profile =============', profile);
+				this.userProfileSubject.next(profile as UserInfo);
+			});
+		}
 	}
 	
 	login(): void {
-		this.authService.initLoginFlow();
+		this.oauthService.initLoginFlow();
 	}
 
 	get isLoggedIn(): boolean {
-		return this.authService.hasValidAccessToken();
+		return this.oauthService.hasValidAccessToken();
 	}
 
 	getToken(): string {
-		return this.authService.getIdToken();
+		return this.oauthService.getIdToken();
 	}
 
 	logout(): void {
-		this.authService.revokeTokenAndLogout();
-		this.authService.logOut();
+		this.oauthService.logOut();
 		location.reload();
 	}
 }
